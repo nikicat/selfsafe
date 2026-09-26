@@ -1,0 +1,21 @@
+# SelfSafe: build the static app, serve it with Caddy.
+#   podman build -f deploy/Containerfile --build-arg PROJECT_ID=$(cat .projectid) -t localhost/selfsafe:<version> .
+# The build log prints the pin value; the same source, lockfile and PROJECT_ID reproduce it.
+
+FROM docker.io/library/node:24-alpine AS build
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+WORKDIR /src
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.json ./
+COPY assets ./assets
+COPY src ./src
+COPY scripts/build-app.js ./scripts/
+ARG PROJECT_ID
+RUN test -n "$PROJECT_ID" || { echo "pass --build-arg PROJECT_ID=<Reown project ID>" >&2; exit 1; }; \
+    PROJECT_ID="$PROJECT_ID" node scripts/build-app.js
+
+FROM docker.io/library/caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /src/dist/app /srv
+EXPOSE 8080

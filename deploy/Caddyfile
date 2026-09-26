@@ -1,0 +1,19 @@
+# SITE_ADDRESS unset: plain HTTP on :8080, for a reverse proxy that terminates TLS.
+# SITE_ADDRESS=selfsafe.example.org: Caddy obtains a certificate itself (publish 80 and 443, keep /data).
+{
+	admin off
+}
+
+{$SITE_ADDRESS::8080} {
+	root * /srv
+	file_server
+	# No `encode`: hash-pin asks for identity encoding and hashes exactly the bytes served.
+	header {
+		# The same policy hash-pin enforces on a pinned origin, so the app behaves the same before pinning.
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src https: wss:; worker-src 'self'; manifest-src 'self'; frame-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cache-Control no-cache
+		-Server
+	}
+}

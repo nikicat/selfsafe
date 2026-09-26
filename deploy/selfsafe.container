@@ -1,0 +1,32 @@
+# Quadlet unit for SelfSafe. Rootless: ~/.config/containers/systemd/selfsafe.container
+# Rootful: /etc/containers/systemd/selfsafe.container. See docs/DEPLOY.md.
+[Unit]
+Description=SelfSafe static web app
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# Set the tag you built and published the pin value for. No auto-update: every release needs users to re-pin.
+Image=localhost/selfsafe:latest
+ContainerName=selfsafe
+ReadOnly=true
+Tmpfs=/config
+NoNewPrivileges=true
+# The caddy binary carries the file capability cap_net_bind_service; exec fails unless it stays in the bounding set.
+DropCapability=ALL
+AddCapability=NET_BIND_SERVICE
+
+# A) Behind a reverse proxy that terminates TLS (default):
+PublishPort=127.0.0.1:8080:8080
+
+# B) Caddy terminates TLS itself: comment out block A, uncomment this.
+#Environment=SITE_ADDRESS=selfsafe.example.org
+#PublishPort=80:80
+#PublishPort=443:443
+#Volume=selfsafe-data:/data
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
