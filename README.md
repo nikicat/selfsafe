@@ -7,7 +7,8 @@ re-pin.
 
 Design: [Backendless Safe Wallet Proxy](https://claude.ai/code/artifact/6569ce96-d237-4a9c-80a8-38d0a418df17)
 
-Deploying: [docs/DEPLOY.md](docs/DEPLOY.md) (container image, Quadlet unit, HTTPS, pin values). Open work: [TODO.md](TODO.md).
+Start here: decisions in [docs/adr/](docs/adr/README.md), working notes (addresses, test setup, quirks) in
+[docs/NOTES.md](docs/NOTES.md), open work in [TODO.md](TODO.md), deployment in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Develop
 

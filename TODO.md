@@ -6,10 +6,10 @@
       `BridgeData` / swap data. A cross-chain swap shows only a selector; a wrong receiver or destination would
       be invisible, and simulation (M4) cannot see cross-chain delivery either.
 
-- [ ] **Single running instance.** Two SelfSafe tabs share one WalletConnect identity (same origin, same
+- [ ] **Single running instance** (ADR 0009). Two SelfSafe tabs share one WalletConnect identity (same origin, same
       IndexedDB) and would both answer every request. Take a Web Lock (`navigator.locks`) at start; a second tab
       shows "open in another tab" instead of starting WalletKit. Needed before multi-Safe, and already now.
-- [ ] **Chains without a hardcoded list.** Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
+- [ ] **Chains without a hardcoded list** (ADR 0011). Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
       current five as editable defaults. For each chain, check at runtime rather than trust a table:
       `eth_chainId` matches, the canonical Safe 1.4.1 singleton / proxy factory / 4337 module / MultiSend and
       EntryPoint v0.7 have code, the bundler lists EntryPoint v0.7, and each configured gas token gets a paymaster
@@ -20,14 +20,14 @@
       (e.g. left over from a cross-chain swap). Add "deploy here": a no-op UserOp paid in whatever the Safe
       holds there (ETH or a supported stablecoin), after the contract checks above. Refuse chains where the
       canonical contracts are missing rather than deploy infrastructure.
-- [ ] **Activity log that persists.** Design needed. Two sources, joined by UserOperation / transaction hash:
+- [ ] **Activity log that persists** (ADR 0010, proposed). Two sources, joined by UserOperation / transaction hash:
       - the chain is the source of truth for what executed: `UserOperationEvent` (EntryPoint, sender = Safe) and
         the Safe's `ExecutionSuccess`/`ExecutionFailure`, scanned per chain from the deployment block, with the last
         scanned block cached. It also shows operations made elsewhere (e.g. through Ambire);
       - a local journal (IndexedDB, `navigator.storage.persist()`, export/import as JSON) holds what the chain
         cannot: which dapp asked, the decoded action, rejections, and above all **off-chain signatures**
         (ERC-1271, Permit2), which leave no trace on-chain until someone uses them.
-- [ ] **Multiple Safes.** Design needed. Direction: one running instance (see above) serving several Safes, not
+- [ ] **Multiple Safes** (ADR 0009, proposed). Direction: one running instance (see above) serving several Safes, not
       one tab per Safe. Each dapp session is bound to one Safe, chosen on the proposal card (its accounts are that
       Safe's address), and requests route by session. Safes are `{label, owner, saltNonce}`; a new Safe is a new
       salt, deployed on first use. At signing time the connected owner account must match that Safe's owner;
