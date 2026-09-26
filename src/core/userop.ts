@@ -5,7 +5,7 @@ import {
     type Address, type Hex, type PublicClient, type TypedDataDefinition, type TypedDataDomain, type TypedDataParameter,
 } from "viem"
 import { toAccount } from "viem/accounts"
-import { entryPoint07Address, type UserOperation } from "viem/account-abstraction"
+import { entryPoint07Address, UserOperationReceiptNotFoundError, type UserOperation } from "viem/account-abstraction"
 import { createSmartAccountClient } from "permissionless"
 import { toSafeSmartAccount } from "permissionless/accounts"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
@@ -18,7 +18,7 @@ export interface SafeRef {
     chainKey: ChainKey
     owner: Address
     saltNonce?: bigint
-    rpcUrl?: string // unset: the chain's default public RPC
+    rpcUrl?: string // unset: CHAINS[chainKey].rpc
 }
 
 /** Who pays the bundler: the paymaster, repaid by the Safe in `token`; or the Safe itself in ETH. */
@@ -35,8 +35,9 @@ export interface SignRequest {
 }
 
 export function clients(ref: SafeRef) {
-    const { chain } = CHAINS[ref.chainKey]
-    const publicClient = createPublicClient({ chain, transport: http(ref.rpcUrl) }) as PublicClient
+    const { chain, rpc } = CHAINS[ref.chainKey]
+    // batch: bursts of reads (balances, nonce, allowance) become one HTTP request, staying under public rate limits
+    const publicClient = createPublicClient({ chain, transport: http(ref.rpcUrl ?? rpc, { batch: true }) }) as PublicClient
     const bundler = createPimlicoClient({ chain, transport: http(bundlerUrl(chain)), entryPoint: ENTRY_POINT })
     return { chain, publicClient, bundler }
 }
@@ -85,8 +86,24 @@ export async function prepareOp(ref: SafeRef, calls: Call[], gas: Gas): Promise<
     throw new Error("the owner signer was not invoked")
 }
 
-/** Check the owner's signature over `typedData`, send `op` unchanged, wait for inclusion. */
-export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData: SignRequest, signature: Hex) {
+/**
+ * Poll for the receipt, tolerating transient failures. Public bundler endpoints rate-limit, and a rate-limited
+ * response without CORS headers reaches a browser as a bare network error; one such poll must not lose an op
+ * that is already on its way.
+ */
+async function waitForReceipt(bundler: ReturnType<typeof clients>["bundler"], hash: Hex, timeoutMs = 180_000) {
+    const end = Date.now() + timeoutMs
+    let lastError: unknown
+    while (Date.now() < end) {
+        try { return await bundler.getUserOperationReceipt({ hash }) }
+        catch (e) { if (!(e instanceof UserOperationReceiptNotFoundError)) lastError = e }
+        await new Promise(r => setTimeout(r, 2000))
+    }
+    throw new Error(`no receipt for UserOperation ${hash} after ${timeoutMs / 1000}s${lastError ? ` (last error: ${(lastError as Error).message})` : ""}`)
+}
+
+/** Check the owner's signature over `typedData`, send `op` unchanged, wait for inclusion. `onSent` gets the UserOperation hash as soon as the bundler accepts it. */
+export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData: SignRequest, signature: Hex, onSent?: (userOpHash: Hex) => void) {
     const { EIP712Domain: _, ...types } = typedData.types
     const signer = await recoverTypedDataAddress({ ...typedData, types, signature } as unknown as TypedDataDefinition & { signature: Hex })
     if (!isAddressEqual(signer, ref.owner)) throw new Error(`signature is from ${signer}, expected the owner ${ref.owner}`)
@@ -96,7 +113,8 @@ export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData
     const safeSig = await (await safeAccount(ref, signature)).signUserOperation(op)
     // No `account`: viem sends the op as-is. Re-preparing would refetch paymaster data and void the signature.
     const userOpHash = await bundler.sendUserOperation({ ...op, signature: safeSig, entryPointAddress: entryPoint07Address })
-    const r = await bundler.waitForUserOperationReceipt({ hash: userOpHash, timeout: 120_000 })
+    onSent?.(userOpHash)
+    const r = await waitForReceipt(bundler, userOpHash)
     // Read state after this op at `blockNumber`: load-balanced public RPCs can answer "latest" from a node behind the bundler's.
     return { userOpHash, txHash: r.receipt.transactionHash, blockNumber: r.receipt.blockNumber, success: r.success, actualGasCost: r.actualGasCost, explorer: `${chain.blockExplorers?.default.url}/tx/${r.receipt.transactionHash}` }
 }

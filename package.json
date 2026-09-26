@@ -7,7 +7,9 @@
     "probe:build": "node probe/build.js",
     "probe": "node probe/build.js && node probe/pair-test.js",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "build": "node scripts/build-app.js",
+    "serve": "python3 -m http.server 8791 --bind 127.0.0.1 --directory dist/app"
   },
   "dependencies": {
     "@reown/walletkit": "^1.6.0",

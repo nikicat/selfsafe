@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { SignClient } from "@walletconnect/sign-client"
 import { startHarness, until } from "../../hash-pin/test/harness.js"
 
-const projectId = readFileSync(new URL(".projectid", import.meta.url), "utf8").trim()
+const projectId = readFileSync(new URL("../.projectid", import.meta.url), "utf8").trim()
 const dist = new URL("dist/", import.meta.url)
 const files = Object.fromEntries(readdirSync(dist).map(n => [`/${n}`, readFileSync(new URL(n, dist))]))
 const outText = `document.getElementById("out").textContent`

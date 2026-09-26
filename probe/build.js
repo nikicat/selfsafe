@@ -9,7 +9,7 @@ await build({
     entryPoints: [new URL("src/probe.js", import.meta.url).pathname],
     outfile: new URL("app.js", dist).pathname,
     bundle: true, format: "esm", platform: "browser", target: "es2022",
-    define: { global: "globalThis", "process.env.NODE_ENV": '"production"', __PROJECT_ID__: JSON.stringify(readFileSync(new URL(".projectid", import.meta.url), "utf8").trim()) },
+    define: { global: "globalThis", "process.env.NODE_ENV": '"production"', __PROJECT_ID__: JSON.stringify(readFileSync(new URL("../.projectid", import.meta.url), "utf8").trim()) },
     logLevel: "warning",
 })
 const app = readFileSync(new URL("app.js", dist))

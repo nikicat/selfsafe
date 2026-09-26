@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SelfSafe</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css" integrity="{{style.css}}">
+<script type="module" src="/app.js" integrity="{{app.js}}"></script>
+</head>
+<body>
+<header><h1>SelfSafe</h1><span id="status" class="muted">starting…</span></header>
+<section>
+  <h2>Owner</h2>
+  <div id="owner"></div>
+</section>
+<section>
+  <h2>Safe</h2>
+  <div id="safe"></div>
+</section>
+<section>
+  <h2>Connect a dapp</h2>
+  <form id="pair-form"><input id="pair-uri" placeholder="wc:… (copy the WalletConnect link from the dapp)" autocomplete="off" spellcheck="false"><button>Pair</button></form>
+  <ul id="sessions"></ul>
+</section>
+<section>
+  <h2>Requests</h2>
+  <div id="requests"><p class="muted">none</p></div>
+</section>
+<section>
+  <h2>Log</h2>
+  <ol id="log" reversed></ol>
+</section>
+</body>
+</html>
