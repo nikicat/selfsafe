@@ -90,13 +90,27 @@ function renderSafe() {
             ...(["usdt", "usdc", "eth"] as const).map(g => el("option", { value: g, selected: gasChoice(k) === g }, g === "eth" ? "ETH (Safe pays)" : `${g.toUpperCase()} (paymaster)`)))
         const bal = el("td", { className: "mono muted" }, "…")
         const deployed = el("td", { className: "muted" }, "…")
-        balances(k).then(b => { bal.textContent = b.text; bal.className = "mono"; deployed.textContent = b.deployed ? "deployed" : "not yet"; deployed.className = b.deployed ? "ok" : "muted" },
+        balances(k).then(b => {
+            bal.textContent = b.text; bal.className = "mono"
+            fill(deployed, b.deployed ? "deployed" : "not yet", !b.deployed && el("button", { className: "deploy", onclick: () => deploySafe(k) }, "Deploy"))
+            deployed.className = b.deployed ? "ok" : "muted"
+        },
             () => { bal.textContent = "RPC error" })
         return el("tr", {}, el("td", {}, CHAINS[k].chain.name), deployed, bal, el("td", {}, select))
     })
     box.replaceChildren(
         el("p", {}, code(safe)),
         el("table", {}, el("tr", {}, el("th", {}, "Chain"), el("th", {}, "Safe"), el("th", {}, "Balances"), el("th", {}, "Gas")), ...rows))
+}
+
+/** A no-op UserOperation (the Safe calls itself with nothing) whose initCode deploys the Safe, paid with the chain's gas choice. */
+function deploySafe(k: ChainKey) {
+    const card: Card = { req: { kind: "local", id: Date.now() }, box: el("div", { className: "card" }), state: "open" }
+    const head = el("p", {}, el("strong", {}, "Deploy the Safe"), ` on ${CHAINS[k].chain.name}`)
+    card.box.append(head)
+    cards.push(card)
+    renderRequests()
+    sendTransaction(card, head, k, { to: safe, value: "0x0", data: "0x" }).catch(e => fail(card, e))
 }
 
 async function balances(k: ChainKey) {
@@ -144,10 +158,11 @@ $("pair-form").addEventListener("submit", async e => {
 type Req =
     | { kind: "proposal"; id: number; params: any; verify: any }
     | { kind: "request"; id: number; topic: string; params: any }
+    | { kind: "local"; id: number } // started in the app (deploy), no dapp to answer
 interface Card { req: Req; box: HTMLElement; state: "open" | "done" }
 const cards: Card[] = []
 
-function addRequest(req: Req) {
+function addRequest(req: Exclude<Req, { kind: "local" }>) {
     const card: Card = { req, box: el("div", { className: "card" }), state: "open" }
     cards.push(card)
     const what = req.kind === "proposal" ? `connection from ${req.params.proposer.metadata.name}` : req.params.request.method
@@ -164,8 +179,8 @@ function renderRequests() {
 }
 
 const peerOf = (topic: string) => (kit.getActiveSessions() as any)[topic]?.peer.metadata ?? { name: "?", url: "?" }
-const respond = (c: Card, result: unknown) => kit.respondSessionRequest({ topic: (c.req as any).topic, response: { id: c.req.id, jsonrpc: "2.0", result } })
-const respondError = (c: Card, code: number, message: string) => kit.respondSessionRequest({ topic: (c.req as any).topic, response: { id: c.req.id, jsonrpc: "2.0", error: { code, message } } })
+const respond = async (c: Card, result: unknown) => c.req.kind !== "local" && kit.respondSessionRequest({ topic: (c.req as any).topic, response: { id: c.req.id, jsonrpc: "2.0", result } })
+const respondError = async (c: Card, code: number, message: string) => c.req.kind !== "local" && kit.respondSessionRequest({ topic: (c.req as any).topic, response: { id: c.req.id, jsonrpc: "2.0", error: { code, message } } })
 
 function finish(c: Card, ...lines: (Node | string)[]) {
     c.state = "done"

@@ -22,10 +22,10 @@ let dapp, failed = false
 try {
     h.sites.selfsafe = { files, overrides: {}, log: [] }
     const ready = `document.getElementById("status").textContent === "ready" && !!document.querySelector("#safe code")`
-    // Remember an owner before pinning; the origin (and its storage) stays the same across the pin.
-    await h.load("selfsafe", `document.getElementById("status").textContent === "ready"`)
+    // A first pin wipes the site's storage (hash-pin ADR 0004), so remember the owner after pinning and reload.
+    await h.pin("selfsafe", `document.getElementById("status").textContent === "ready"`)
     await page(`localStorage.setItem("selfsafe", JSON.stringify({ owner: "${OWNER}", gas: { base: "usdt" } }))`)
-    await h.pin("selfsafe", ready)
+    await h.load("selfsafe", ready)
     assert.equal(await page(`document.querySelector("#safe code").textContent`), SAFE)
     console.log("ok   pinned app shows the Safe for the remembered owner")
 
@@ -55,6 +55,7 @@ try {
 } catch (e) {
     failed = true
     console.log(`FAIL ${e.message}`)
+    console.log("page status:", await page(`[document.getElementById("status").textContent, document.getElementById("safe").innerText, localStorage.getItem("selfsafe")].join(" / ")`).catch(x => x.message))
     console.log("page log:", await page(`document.getElementById("log").innerText`).catch(x => x.message))
 } finally {
     await dapp?.core.relayer.transportClose().catch(() => {})
