@@ -8,6 +8,16 @@
       charge (estimated gas × current fee × the quote's exchange rate); in native mode, the maximum and likely cost
       in ETH. After inclusion, show what was actually charged (`actualGasCost`, or the token transfer to the
       paymaster).
+- [ ] **Approve + action as one operation (design first).** A token spend through a dapp is still two UserOps, each
+      signed and paid separately: `approve`, then the swap or bridge. The Safe could run both atomically in one op
+      (MultiSend), but the dapp decides what it sends. Options to weigh:
+      - EIP-5792 (M3): announce `atomic` batching in `wallet_getCapabilities` and accept `wallet_sendCalls`; check
+        which dapps (Jumper/LI.FI widget, Uniswap) actually batch approve + action when the wallet offers it;
+      - hold an `approve` card open and merge it with the next request from the same session into one op: the dapp
+        waits for the approve's tx hash before sending the next call, so this deadlocks unless the answer is faked,
+        which it must not be;
+      - Permit2 routes: after one standing `approve(Permit2)` per token, dapps ask for a signature instead of an
+        approve (off-chain, warned about since `describe.ts`), leaving one on-chain op per action.
 - [ ] **Chains without a hardcoded list** (ADR 0011). Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
       current five as editable defaults. For each chain, check at runtime rather than trust a table:
       `eth_chainId` matches, the canonical Safe 1.4.1 singleton / proxy factory / 4337 module / MultiSend and
