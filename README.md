@@ -18,7 +18,7 @@ pnpm build          # dist/app, prints the pin value (needs .projectid or PROJEC
 pnpm serve          # http://selfsafe.localhost:8791/
 pnpm test && pnpm typecheck
 node test/app-e2e.js   # headless Firefox + hash-pin + real WalletConnect relay (needs ../hash-pin)
-pnpm tsx --test test/erc1271.live.ts   # ERC-1271 against Base via eth_simulateV1 (network)
+pnpm tsx --test test/*.live.ts   # ERC-1271 on Base, mainnet USDT gas approvals; eth_simulateV1 (network)
 ```
 
 ## Layout

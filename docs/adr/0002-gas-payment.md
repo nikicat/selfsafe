@@ -20,4 +20,6 @@ Safe prefunds the EntryPoint). Public keyless Pimlico endpoints.
 
 - Works with no ETH anywhere; ~10% markup in token mode, none in native mode.
 - Depends on Pimlico's public endpoint (rate limits, availability); native mode is the fallback.
-- The mainnet USDT `approve(0)` path is untested.
+- The mainnet USDT `approve(0)` reset is verified in simulation with a leftover allowance (`test/usdt-gas.live.ts`);
+  a real mainnet op is still pending.
+- Token mode needs the Safe to hold the token before preparing: the paymaster's final quote checks live state.
