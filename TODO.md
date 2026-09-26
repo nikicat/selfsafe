@@ -5,10 +5,6 @@
 - [ ] **Decode LI.FI calls** (Jumper): show receiver, destination chain, minimum amount and bridge from
       `BridgeData` / swap data. A cross-chain swap shows only a selector; a wrong receiver or destination would
       be invisible, and simulation (M4) cannot see cross-chain delivery either.
-
-- [ ] **Single running instance** (ADR 0009). Two SelfSafe tabs share one WalletConnect identity (same origin, same
-      IndexedDB) and would both answer every request. Take a Web Lock (`navigator.locks`) at start; a second tab
-      shows "open in another tab" instead of starting WalletKit. Needed before multi-Safe, and already now.
 - [ ] **Chains without a hardcoded list** (ADR 0011). Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
       current five as editable defaults. For each chain, check at runtime rather than trust a table:
       `eth_chainId` matches, the canonical Safe 1.4.1 singleton / proxy factory / 4337 module / MultiSend and
@@ -27,7 +23,7 @@
       - a local journal (IndexedDB, `navigator.storage.persist()`, export/import as JSON) holds what the chain
         cannot: which dapp asked, the decoded action, rejections, and above all **off-chain signatures**
         (ERC-1271, Permit2), which leave no trace on-chain until someone uses them.
-- [ ] **Multiple Safes** (ADR 0009, proposed). Direction: one running instance (see above) serving several Safes, not
+- [ ] **Multiple Safes** (ADR 0009, proposed). Direction: the one running instance (Web Lock, done) serving several Safes, not
       one tab per Safe. Each dapp session is bound to one Safe, chosen on the proposal card (its accounts are that
       Safe's address), and requests route by session. Safes are `{label, owner, saltNonce}`; a new Safe is a new
       salt, deployed on first use. At signing time the connected owner account must match that Safe's owner;
@@ -41,8 +37,6 @@
 
 ## Open checks
 
-- [ ] ERC-1271: a real owner signature accepted by the Safe's `isValidSignature` through the 4337 module as
-      fallback handler (only probed with an empty signature so far).
 - [ ] Mainnet USDT gas path (`approve(0)` reset) with a small amount.
 - [ ] Decoding beyond ERC-20 approve/transfer (known routers, Permit2).
 - [ ] hash-pin: service worker verification is designed but untested.

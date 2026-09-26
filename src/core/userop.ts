@@ -119,6 +119,15 @@ export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData
     return { userOpHash, txHash: r.receipt.transactionHash, blockNumber: r.receipt.blockNumber, success: r.success, actualGasCost: r.actualGasCost, explorer: `${chain.blockExplorers?.default.url}/tx/${r.receipt.transactionHash}` }
 }
 
+/** ERC-1271 on the Safe: the owner signs this SafeMessage over `hash`; the Safe (via the 4337 module as fallback handler) checks it in isValidSignature. */
+export const safeMessage = (chainId: number, safe: Address, hash: Hex): SignRequest => ({
+    domain: { chainId, verifyingContract: safe }, primaryType: "SafeMessage",
+    types: { EIP712Domain: [{ name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }], SafeMessage: [{ name: "message", type: "bytes" }] },
+    message: { message: hash },
+})
+export const ERC1271_MAGIC = "0x1626ba7e"
+export const erc1271Abi = [{ type: "function", name: "isValidSignature", stateMutability: "view", inputs: [{ type: "bytes32" }, { type: "bytes" }], outputs: [{ type: "bytes4" }] }] as const
+
 /** JSON with bigints as decimal strings, for handing ops and typed data across processes or storage. */
 export const toJson = (v: unknown) => JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x), 2)
 const BIGINT_FIELDS = new Set(["nonce", "callGasLimit", "verificationGasLimit", "preVerificationGas", "maxFeePerGas", "maxPriorityFeePerGas", "paymasterVerificationGasLimit", "paymasterPostOpGasLimit"])

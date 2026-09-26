@@ -17,5 +17,6 @@ requests route by session. At signing time the connected owner account must matc
 
 ## Consequences
 
+- The Web Lock is implemented (`src/app/main.ts`); a waiting tab takes over when the running one closes.
 - One relay connection and one place for notifications.
 - A new Safe is a new salt, deployed on first use.

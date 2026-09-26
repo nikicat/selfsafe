@@ -26,4 +26,5 @@ owner = an EOA in the user's browser wallet (hardware or passphrase account). Th
 - Keys rotate with `swapOwner` per chain; the address is the same on every chain (CREATE2 over factory, setup and
   salt), and on a chain where it is not deployed yet it can only ever be deployed with the original owner.
 - Every action is a UserOperation; ~40% more gas than an EOA (measured on Base and Arbitrum).
-- Off-chain signatures go through ERC-1271 on the Safe (not yet verified with a real signature).
+- Off-chain signatures go through ERC-1271 on the Safe: the 4337 module as fallback handler accepts the owner's
+  SafeMessage signature (`test/erc1271.live.ts`, a real signature against simulated deployment on Base).

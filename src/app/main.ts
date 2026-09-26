@@ -5,7 +5,7 @@ import { WalletKit, type IWalletKit } from "@reown/walletkit"
 import { buildApprovedNamespaces, getSdkError } from "@walletconnect/utils"
 import { decodeFunctionData, erc20Abi, formatEther, formatUnits, hashMessage, hashTypedData, hexToBytes, isAddress, isAddressEqual, maxUint256, type Address, type Hex } from "viem"
 import { CHAINS, type ChainKey } from "../core/chains"
-import { clients, prepareOp, safeAccount, submitOp, type Gas, type SignRequest } from "../core/userop"
+import { clients, erc1271Abi, ERC1271_MAGIC, prepareOp, safeAccount, safeMessage, submitOp, type Gas, type SignRequest } from "../core/userop"
 import { discoverWallets, Owner, type WalletInfo } from "./owner"
 
 declare const __PROJECT_ID__: string
@@ -297,20 +297,15 @@ async function signMessage(c: Card, head: HTMLElement, key: ChainKey, method: st
         shown = JSON.stringify(typed.message, null, 2)
     }
     const chainId = CHAINS[key].chain.id
-    const safeMessage = {
-        domain: { chainId, verifyingContract: safe! }, primaryType: "SafeMessage",
-        types: { EIP712Domain: [{ name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }], SafeMessage: [{ name: "message", type: "bytes" }] },
-        message: { message: hash },
-    }
     c.box.append(el("pre", { className: "mono" }, shown.slice(0, 2000)))
     const note = el("p", { className: "muted" }, "Signing a message makes it valid for the Safe (ERC-1271). Off-chain signatures can authorise spending (e.g. Permit2); read it first.")
     const sign = el("button", { className: "primary sign", disabled: !owner, onclick: async () => {
         sign.disabled = true
         try {
-            const signature = await owner!.signTypedData(chainId, safeMessage)
+            const signature = await owner!.signTypedData(chainId, safeMessage(chainId, safe!, hash))
             const { publicClient } = clients(ref(key))
-            const magic = await publicClient.readContract({ address: safe!, abi: [{ type: "function", name: "isValidSignature", stateMutability: "view", inputs: [{ type: "bytes32" }, { type: "bytes" }], outputs: [{ type: "bytes4" }] }], functionName: "isValidSignature", args: [hash, signature] })
-            if (magic !== "0x1626ba7e") throw new Error(`the Safe did not accept the signature (${magic})`)
+            const magic = await publicClient.readContract({ address: safe!, abi: erc1271Abi, functionName: "isValidSignature", args: [hash, signature] })
+            if (magic !== ERC1271_MAGIC) throw new Error(`the Safe did not accept the signature (${magic})`)
             await respond(c, signature)
             finish(c, head, el("p", { className: "ok" }, "Signed."))
         } catch (e) { sign.disabled = false; fail(c, e) }
@@ -325,6 +320,15 @@ discoverWallets(w => { wallets = w; renderOwner() })
 renderOwner()
 renderSafe()
 loadSafe().catch(e => log(`Safe: ${(e as Error).message}`))
-startWalletKit()
+// One instance per origin: all tabs share one WalletConnect identity (IndexedDB), so two running tabs would both
+// answer every request. A second tab waits for the lock and takes over when the first closes.
+const runWalletKit = () => startWalletKit()
     .then(() => { status("ready"); renderSessions() })
+    .then(() => new Promise<never>(() => {})) // hold the lock while this tab lives
     .catch(e => { status("WalletConnect failed to start"); log((e as Error).message) })
+navigator.locks.request("selfsafe", { ifAvailable: true }, lock => {
+    if (lock) return runWalletKit()
+    status("already open in another tab; this tab takes over when that one closes")
+    ;($("pair-form") as HTMLFormElement).querySelector("button")!.disabled = true
+    navigator.locks.request("selfsafe", () => { ($("pair-form") as HTMLFormElement).querySelector("button")!.disabled = false; return runWalletKit() })
+})
