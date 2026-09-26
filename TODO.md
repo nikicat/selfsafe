@@ -2,6 +2,12 @@
 
 ## Next
 
+- [ ] **Show what a transaction costs in gas, in the token that pays it.** The card shows only "Max gas cost … ETH
+      equivalent", even in token mode. Show, before signing: in token mode, the most the paymaster may take in
+      USDT/USDC (the injected `approve(paymaster, maxCost)` amount, from `pimlico_getTokenQuotes`) and the likely
+      charge (estimated gas × current fee × the quote's exchange rate); in native mode, the maximum and likely cost
+      in ETH. After inclusion, show what was actually charged (`actualGasCost`, or the token transfer to the
+      paymaster).
 - [ ] **Chains without a hardcoded list** (ADR 0011). Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
       current five as editable defaults. For each chain, check at runtime rather than trust a table:
       `eth_chainId` matches, the canonical Safe 1.4.1 singleton / proxy factory / 4337 module / MultiSend and
