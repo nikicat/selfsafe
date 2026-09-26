@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { describeTypedData } from "../src/app/describe"
+import { readFileSync } from "node:fs"
+import { describeLifiCall, describeTypedData } from "../src/app/describe"
 
 const SAFE = "0x124Ef647181eda69861b61596802129E3B018765"
 const SPENDER = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
@@ -51,4 +52,37 @@ test("DAI-style permit and unknown typed data", async () => {
 
     const login = await describeTypedData({ domain: { name: "Example", chainId: 8453 }, primaryType: "Login", types: {}, message: { nonce: "x" } }, ctx)
     assert.deepEqual(login, { summary: ["Login for Example: not a known format; read the data below"], warnings: [] })
+})
+
+// Real LI.FI Diamond calls from Base, with what LiFiTransferStarted / LiFiGenericSwapCompleted reported for them
+const lifi: { kind: string; selector: string; input: `0x${string}`; value: string; event: { receiver: string } }[] =
+    JSON.parse(readFileSync(new URL("fixtures/lifi-base.json", import.meta.url), "utf8"))
+const call = (selector: string) => lifi.find(c => c.selector === selector)!
+const lifiCtx = (safe: string) => ({ ...ctx, safe, nativeSymbol: "ETH", chainName: (id: number) => ({ 1: "Ethereum", 42161: "Arbitrum One" } as Record<number, string>)[id] }) as any
+const describe = (selector: string, safe = SAFE) => describeLifiCall(call(selector).input, BigInt(call(selector).value), lifiCtx(safe))
+
+test("LI.FI bridge: receiver and destination decoded; no warning when the receiver is the Safe itself", async () => {
+    const relay = call("0xa3443faa")
+    assert.deepEqual(await describe("0xa3443faa", relay.event.receiver), {
+        summary: [`LI.FI bridge via relaydepository: sends 0.006622190190882415 ETH to ${relay.event.receiver} on Ethereum`], warnings: [] })
+    const stargate = await describe("0xa6010a66")
+    assert.match(stargate.summary[0]!, /via stargateV2: sends .* on Arbitrum One$/)
+    assert.deepEqual(stargate.warnings, [`the receiver is ${call("0xa6010a66").event.receiver}, not this Safe`])
+})
+
+test("LI.FI bridge: non-EVM receivers, unmanaged chains and destination calls are flagged", async () => {
+    assert.deepEqual((await describe("0x80c65808")).warnings, ["the receiver on Solana is not an EVM address and is not decoded here; check it in the dapp"])
+    const across = call("0xa1f1ce43")
+    assert.deepEqual((await describe("0xa1f1ce43", across.event.receiver)).warnings, [
+        "the destination (chain 4663) is not a chain SelfSafe manages: the Safe may not be usable there",
+        "the bridged funds are passed to a contract call on the destination chain; the final receiver is decided there",
+    ])
+})
+
+test("LI.FI same-chain swap: receiver decoded; undecodable calls say so", async () => {
+    const swap = await describe("0x736eac0b")
+    assert.match(swap.summary[0]!, /^LI\.FI swap on this chain \(via jumper\.exchange\): the output goes to 0x51E4/)
+    assert.deepEqual(swap.warnings, [`the receiver is ${call("0x736eac0b").event.receiver}, not this Safe`])
+    const garbage = await describeLifiCall("0x12345678", 0n, lifiCtx(SAFE))
+    assert.deepEqual(garbage.warnings, ["a LI.FI call (0x12345678) that could not be decoded: the receiver is unknown"])
 })

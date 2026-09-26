@@ -2,9 +2,6 @@
 
 ## Next
 
-- [ ] **Decode LI.FI calls** (Jumper): show receiver, destination chain, minimum amount and bridge from
-      `BridgeData` / swap data. A cross-chain swap shows only a selector; a wrong receiver or destination would
-      be invisible, and simulation (M4) cannot see cross-chain delivery either.
 - [ ] **Chains without a hardcoded list** (ADR 0011). Chains become user settings `{chainId, rpcUrl, bundlerUrl?}` with the
       current five as editable defaults. For each chain, check at runtime rather than trust a table:
       `eth_chainId` matches, the canonical Safe 1.4.1 singleton / proxy factory / 4337 module / MultiSend and

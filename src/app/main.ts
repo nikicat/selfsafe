@@ -6,7 +6,7 @@ import { buildApprovedNamespaces, getSdkError } from "@walletconnect/utils"
 import { decodeFunctionData, erc20Abi, formatEther, formatUnits, hashMessage, hashTypedData, hexToBytes, isAddress, isAddressEqual, maxUint256, type Address, type Hex } from "viem"
 import { CHAINS, type ChainKey } from "../core/chains"
 import { clients, erc1271Abi, ERC1271_MAGIC, prepareOp, safeAccount, safeMessage, submitOp, type Gas, type SignRequest } from "../core/userop"
-import { describeTypedData, type Described } from "./describe"
+import { describeLifiCall, describeTypedData, LIFI_DIAMOND, type Described } from "./describe"
 import { discoverWallets, Owner, type WalletInfo } from "./owner"
 
 declare const __PROJECT_ID__: string
@@ -264,7 +264,10 @@ async function sendTransaction(c: Card, head: HTMLElement, key: ChainKey, tx: an
         el("tr", {}, el("td", {}, "value"), el("td", {}, `${formatEther(call.value)} ETH`)),
         el("tr", {}, el("td", {}, "data"), el("td", {}, call.data === "0x" ? "none" : code(`${call.data.slice(0, 10)}… (${(call.data.length - 2) / 2} bytes)`))),
         el("tr", {}, el("td", {}, "gas"), el("td", {}, gas.kind === "native" ? "ETH from the Safe" : `${gasChoice(key).toUpperCase()} via paymaster`))))
-    describeCall(key, call).then(d => { c.box.querySelector(".describe")!.textContent = d }, () => { c.box.querySelector(".describe")!.textContent = "unknown call" })
+    describeCall(key, call).then(d => {
+        c.box.querySelector(".describe")!.textContent = d.summary.join("; ")
+        c.box.querySelector("table")!.after(...warningElements(d.warnings))
+    }, () => { c.box.querySelector(".describe")!.textContent = "unknown call" })
     const note = el("p", { className: "muted prep" }, "Preparing…")
     c.box.append(note, rejectButton(c))
     const { op, typedData } = await prepareOp(ref(key), [call], gas)
@@ -289,19 +292,26 @@ async function sendTransaction(c: Card, head: HTMLElement, key: ChainKey, tx: an
 }
 
 /** Plain-language description of a call. Covers ERC-20 transfers and approvals; anything else shows its selector until simulation lands (M4). */
-async function describeCall(key: ChainKey, call: { to: Address; value: bigint; data: Hex }) {
-    if (call.data === "0x") return `send ${formatEther(call.value)} ETH`
+async function describeCall(key: ChainKey, call: { to: Address; value: bigint; data: Hex }): Promise<Described> {
+    const one = (line: string, ...warnings: string[]) => ({ summary: [line], warnings })
+    if (call.data === "0x") return one(`send ${formatEther(call.value)} ETH`)
+    if (isAddressEqual(call.to, LIFI_DIAMOND)) return describeLifiCall(call.data, call.value, {
+        chainId: CHAINS[key].chain.id, safe: safe!, now: Math.floor(Date.now() / 1000), token: tokenInfo(key),
+        nativeSymbol: CHAINS[key].chain.nativeCurrency.symbol, chainName: id => CHAIN_KEYS.map(k => CHAINS[k].chain).find(ch => ch.id === id)?.name,
+    })
     let decoded
-    try { decoded = decodeFunctionData({ abi: erc20Abi, data: call.data }) } catch { return `contract call ${call.data.slice(0, 10)}${call.value ? ` with ${formatEther(call.value)} ETH` : ""}` }
+    try { decoded = decodeFunctionData({ abi: erc20Abi, data: call.data }) } catch { return one(`contract call ${call.data.slice(0, 10)}${call.value ? ` with ${formatEther(call.value)} ETH` : ""}`) }
     const { publicClient } = clients(ref(key))
     const token = { address: call.to, abi: erc20Abi } as const
     const [symbol, decimals] = await Promise.all([publicClient.readContract({ ...token, functionName: "symbol" }), publicClient.readContract({ ...token, functionName: "decimals" })])
     const amount = (v: bigint) => (v === maxUint256 ? `UNLIMITED ${symbol}` : `${formatUnits(v, decimals)} ${symbol}`)
     const [a0, a1] = decoded.args as [Address, bigint]
-    if (decoded.functionName === "approve") return `approve ${a0} to spend ${amount(a1)} of the Safe's`
-    if (decoded.functionName === "transfer") return `transfer ${amount(a1)} to ${a0}`
-    return `${symbol}.${decoded.functionName}(${decoded.args?.map(String).join(", ")})`
+    if (decoded.functionName === "approve") return one(`approve ${a0} to spend ${amount(a1)} of the Safe's`, ...(a1 === maxUint256 ? [`UNLIMITED ${symbol} for ${a0}`] : []))
+    if (decoded.functionName === "transfer") return one(`transfer ${amount(a1)} to ${a0}`)
+    return one(`${symbol}.${decoded.functionName}(${decoded.args?.map(String).join(", ")})`)
 }
+
+const warningElements = (warnings: string[]) => warnings.map(w => el("p", { className: "bad warning" }, el("strong", {}, `Warning: ${w}`)))
 
 const tokenInfo = (key: ChainKey) => async (address: Address) => {
     const { publicClient } = clients(ref(key))
@@ -330,7 +340,7 @@ async function signMessage(c: Card, head: HTMLElement, key: ChainKey, method: st
     }
     c.box.append(
         ...described.summary.map(line => el("p", {}, line)),
-        ...described.warnings.map(w => el("p", { className: "bad warning" }, el("strong", {}, `Warning: ${w}`))),
+        ...warningElements(described.warnings),
         el("pre", { className: "mono" }, shown.slice(0, 2000)))
     const note = el("p", { className: "muted" }, "Signing a message makes it valid for the Safe (ERC-1271). Off-chain signatures can authorise spending (e.g. Permit2); read it first.")
     const sign = el("button", { className: "primary sign", disabled: !owner, onclick: async () => {

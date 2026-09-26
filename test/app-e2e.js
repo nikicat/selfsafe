@@ -51,6 +51,16 @@ try {
     await assert.rejects(request, e => e.code === 4001 || /rejected/i.test(e.message))
     console.log("ok   rejecting in the app reaches the dapp as a user rejection")
 
+    // A LI.FI bridge to someone else's address must say so, whatever happens to the op itself.
+    const bridge = JSON.parse(readFileSync(new URL("fixtures/lifi-base.json", import.meta.url), "utf8")).find(c => c.selector === "0xa6010a66")
+    const bridgeRequest = dapp.request({ topic: session.topic, chainId: "eip155:8453", request: { method: "eth_sendTransaction", params: [{ from: SAFE, to: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE", value: `0x${BigInt(bridge.value).toString(16)}`, data: bridge.input }] } })
+    const bridgeWarnings = await until(() => page(`[...document.querySelectorAll("#requests .warning")].map(w => w.textContent).join("\\n") || null`), "bridge warnings", 30000)
+    assert.equal(bridgeWarnings, `Warning: the receiver is ${bridge.event.receiver}, not this Safe`)
+    assert.match(await page(`document.querySelector("#requests .describe").textContent`), /^LI\.FI bridge via stargateV2: sends .* on Arbitrum One$/)
+    await page(`document.querySelector("#requests button.reject").click()`)
+    await assert.rejects(bridgeRequest, e => e.code === 4001 || /rejected/i.test(e.message))
+    console.log("ok   a LI.FI bridge to another receiver is decoded and flagged")
+
     // An unlimited, never-expiring Permit2 allowance must be spelled out and flagged before the owner can sign it.
     const permit = {
         domain: { name: "Permit2", chainId: 8453, verifyingContract: "0x000000000022D473030F116dDEE9F6B43aC78BA3" },
