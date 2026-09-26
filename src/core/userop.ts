@@ -1,11 +1,11 @@
 // UserOperations for a 1-of-1 Safe (4337 module) whose owner signs elsewhere (browser wallet, hardware, CLI).
 // Flow: prepareOp -> owner signs `typedData` -> submitOp. Browser-safe: no Node APIs.
 import {
-    createPublicClient, erc20Abi, formatEther, formatUnits, getTypesForEIP712Domain, http, recoverTypedDataAddress, isAddressEqual,
+    BaseError, createPublicClient, erc20Abi, formatEther, formatUnits, getTypesForEIP712Domain, http, HttpRequestError, recoverTypedDataAddress, isAddressEqual,
     type Address, type Hex, type PublicClient, type TypedDataDefinition, type TypedDataDomain, type TypedDataParameter,
 } from "viem"
 import { toAccount } from "viem/accounts"
-import { entryPoint07Address, UserOperationReceiptNotFoundError, type UserOperation } from "viem/account-abstraction"
+import { entryPoint07Address, getUserOperationHash, UserOperationReceiptNotFoundError, type UserOperation } from "viem/account-abstraction"
 import { createSmartAccountClient } from "permissionless"
 import { toSafeSmartAccount } from "permissionless/accounts"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
@@ -122,6 +122,26 @@ async function waitForReceipt(bundler: ReturnType<typeof clients>["bundler"], ha
     throw new Error(`no receipt for UserOperation ${hash} after ${timeoutMs / 1000}s${lastError ? ` (last error: ${(lastError as Error).message})` : ""}`)
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+/** A failure worth retrying: no HTTP status (network error, or a rate-limited reply without CORS headers in a browser), 429 or 5xx. */
+const isTransient = (e: unknown) => e instanceof BaseError && !!e.walk(x => x instanceof HttpRequestError && (!x.status || x.status === 429 || x.status >= 500))
+
+/**
+ * Send a signed op, retrying transient failures for about a minute (Pimlico's public endpoint rate-limits per IP for
+ * ~30 s). A failed send may still have reached the bundler, so before each resend ask it whether it has the op.
+ * Returns what `send` returned, or undefined when the bundler turned out to have the op already.
+ */
+export async function sendWithRetry<T>(send: () => Promise<T>, isKnown: () => Promise<boolean>, delaysMs = [2000, 4000, 8000, 16000, 30000]): Promise<T | undefined> {
+    for (let i = 0; ; i++) {
+        try { return await send() } catch (e) {
+            if (!isTransient(e) || i >= delaysMs.length) throw e
+            await sleep(delaysMs[i]!)
+            if (await isKnown()) return undefined // sent despite the error; the caller knows the hash
+        }
+    }
+}
+
 /** Check the owner's signature over `typedData`, send `op` unchanged, wait for inclusion. `onSent` gets the UserOperation hash as soon as the bundler accepts it. */
 export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData: SignRequest, signature: Hex, onSent?: (userOpHash: Hex) => void) {
     const { EIP712Domain: _, ...types } = typedData.types
@@ -132,7 +152,11 @@ export async function submitOp(ref: SafeRef, op: UserOperation<"0.7">, typedData
 
     const safeSig = await (await safeAccount(ref, signature)).signUserOperation(op)
     // No `account`: viem sends the op as-is. Re-preparing would refetch paymaster data and void the signature.
-    const userOpHash = await bundler.sendUserOperation({ ...op, signature: safeSig, entryPointAddress: entryPoint07Address })
+    const signed = { ...op, signature: safeSig }
+    const computedHash = getUserOperationHash({ userOperation: signed, entryPointAddress: entryPoint07Address, entryPointVersion: "0.7", chainId: chain.id })
+    const userOpHash = await sendWithRetry(
+        () => bundler.sendUserOperation({ ...signed, entryPointAddress: entryPoint07Address }),
+        () => bundler.getUserOperation({ hash: computedHash }).then(() => true, () => false)) ?? computedHash
     onSent?.(userOpHash)
     const r = await waitForReceipt(bundler, userOpHash)
     // Read state after this op at `blockNumber`: load-balanced public RPCs can answer "latest" from a node behind the bundler's.

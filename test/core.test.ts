@@ -24,3 +24,24 @@ test("submitOp refuses a signature that is not the owner's, before touching the 
     const signature = await stranger.signTypedData({ ...typed, types } as never)
     await assert.rejects(submitOp({ chainKey: "base", owner: owner.address }, op, typed, signature), /signature is from .* expected the owner/)
 })
+
+test("sendWithRetry retries rate limits and network errors, stops when the bundler has the op, rethrows the rest", async () => {
+    const { HttpRequestError, RpcRequestError } = await import("viem")
+    const { sendWithRetry } = await import("../src/core/userop")
+    const rateLimited = new HttpRequestError({ url: "https://bundler.invalid", status: 429 })
+    const networkError = new HttpRequestError({ url: "https://bundler.invalid" }) // what a CORS-less 429 looks like in a browser
+    const failing = (...errors: Error[]) => { let n = 0; return async () => { if (n < errors.length) throw errors[n++]; return "0xhash" } }
+    let sends = 0
+    const counted = (f: () => Promise<unknown>) => () => (sends++, f())
+
+    assert.equal(await sendWithRetry(counted(failing(rateLimited, networkError)), async () => false, [1, 1, 1]), "0xhash")
+    assert.equal(sends, 3, "two transient failures, then success")
+
+    sends = 0
+    assert.equal(await sendWithRetry(counted(failing(networkError, networkError)), async () => true, [1, 1, 1]), undefined)
+    assert.equal(sends, 1, "the bundler already has the op: no resend")
+
+    const rejected = new RpcRequestError({ url: "https://bundler.invalid", body: {}, error: { code: -32500, message: "AA25 invalid account nonce" } })
+    await assert.rejects(sendWithRetry(failing(rejected), async () => false, [1]), /AA25/)
+    await assert.rejects(sendWithRetry(failing(rateLimited, rateLimited, rateLimited), async () => false, [1, 1]), HttpRequestError, "gives up after the last delay")
+})
