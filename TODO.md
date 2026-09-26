@@ -33,10 +33,6 @@
 
 ## Open checks
 
-- [ ] `test/app-e2e.js` is blocked: the Reown project no longer allows the origin `selfsafe.localhost` (the relay
-      closes with `3000 Unauthorized: origin not allowed`; plain `localhost` works). Add it in the Reown dashboard.
-      After that, the e2e's USDT-gas step on Base will hit the readable AA50 error: its test Safe holds no USDT.
-      The app also shows "ready" while the relay refuses it; surface fatal relay errors.
 - [ ] Mainnet USDT gas for real, two small ops. The `approve(0)` reset under a leftover allowance is verified in
       simulation (`test/usdt-gas.live.ts`); the paymaster's validation and postOp with USDT are not.
 - [ ] Decoding beyond ERC-20 approve/transfer (known routers, Permit2).

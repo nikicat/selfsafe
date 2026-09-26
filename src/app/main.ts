@@ -42,6 +42,7 @@ let owner: Owner | null = null
 let wallets: WalletInfo[] = []
 let safe: Address | null = null
 let kit: IWalletKit
+let relayError: string | null = null
 
 const ref = (k: ChainKey) => ({ chainKey: k, owner: settings.owner! })
 
@@ -128,6 +129,10 @@ const EVENTS = ["chainChanged", "accountsChanged"]
 
 async function startWalletKit() {
     const core = new Core({ projectId: __PROJECT_ID__ })
+    // The relay can refuse the page (e.g. "origin not allowed" for a domain missing from the Reown project) and
+    // WalletKit still initialises; show the refusal instead of "ready".
+    core.relayer.on("relayer_error", (e: Error) => { if (relayError === e.message) return; relayError = e.message; status(`relay refused the connection: ${e.message}`); log(`relay: ${e.message}`) })
+    core.relayer.on("relayer_connect", () => { relayError = null; if (kit) status("ready") })
     // Dapps see this metadata. @walletconnect/utils rewrites the object passed in (url -> this page's origin,
     // icons -> its favicon), which would tell every dapp where the app is hosted; install fresh neutral objects after init.
     const neutral = () => ({ name: "Wallet", description: "", url: "https://wallet.invalid", icons: [] as string[] })
@@ -338,7 +343,7 @@ loadSafe().catch(e => log(`Safe: ${(e as Error).message}`))
 // One instance per origin: all tabs share one WalletConnect identity (IndexedDB), so two running tabs would both
 // answer every request. A second tab waits for the lock and takes over when the first closes.
 const runWalletKit = () => startWalletKit()
-    .then(() => { status("ready"); renderSessions() })
+    .then(() => { if (!relayError) status("ready"); renderSessions() })
     .then(() => new Promise<never>(() => {})) // hold the lock while this tab lives
     .catch(e => { status("WalletConnect failed to start"); log((e as Error).message) })
 navigator.locks.request("selfsafe", { ifAvailable: true }, lock => {

@@ -15,7 +15,7 @@ SelfSafe pinned with hash-pin (ADR 0004). The current test setup is *not* unlink
 | --- | --- |
 | Owner (test) | kept out of the repo (scripts take `OWNER=`), in Ambire in Firefox (default profile) |
 | Safe (salt 0) | the owner's counterfactual Safe; its address and state stay out of the repo, like the owner |
-| Reown project | ID in `.projectid` (gitignored); allowed domains include localhost |
+| Reown project | ID in `.projectid` (gitignored); allowed domains must include `localhost` and `selfsafe.localhost` (`pnpm serve`, the e2e harness), or the relay closes with `origin not allowed` |
 | Signing from scripts | `browser-web3-signer evm sign-typed-data --file typed.json --address <owner> --chain <id>` opens the browser wallet |
 | hash-pin | `~/src/hash-pin`, loaded as a temporary add-on via `about:debugging` (gone after a Firefox restart) |
 | Local serving | `pnpm serve` → http://selfsafe.localhost:8791/ (hash-pin allows http only for localhost) |

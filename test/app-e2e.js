@@ -1,6 +1,7 @@
 // End-to-end, headless: the built app pinned with hash-pin, paired with a Node test dapp over the real relay.
 // Covers everything up to the owner's signature (which needs a real wallet): session approval with neutral
-// metadata, eth_sendTransaction prepared into a signable UserOp, rejection reaching the dapp, no CSP errors.
+// metadata, eth_sendTransaction prepared up to the paymaster (the test Safe is unfunded, so it ends in a readable
+// gas error), rejection reaching the dapp, no CSP errors. Needs `selfsafe.localhost` among the Reown project's domains.
 // Run: pnpm build && node test/app-e2e.js
 import { readFileSync, readdirSync } from "node:fs"
 import assert from "node:assert/strict"
@@ -40,10 +41,11 @@ try {
     console.log("ok   session approved; the dapp sees only neutral metadata and the Safe address")
 
     const request = dapp.request({ topic: session.topic, chainId: "eip155:8453", request: { method: "eth_sendTransaction", params: [{ from: SAFE, to: OWNER, value: "0x0", data: "0x" }] } })
-    await until(() => page(`!!document.querySelector("#requests .prep.ready")`), "UserOp prepared", 45000)
-    assert.match(await page(`document.querySelector("#requests .prep").textContent`), /Ready to sign\. Max gas cost/)
+    // The test Safe holds nothing, so preparing stops at the paymaster; the card must say why in plain words.
+    const error = await until(() => page(`document.querySelector("#requests .bad")?.textContent`), "gas error", 45000)
+    assert.match(error, /the Safe cannot pay for gas: it holds 0 USDT on Base \(AA50\)/)
     assert.equal(await until(() => page(`document.querySelector("#requests .describe")?.textContent !== "…" && document.querySelector("#requests .describe").textContent`), "call description"), "send 0 ETH")
-    console.log("ok   eth_sendTransaction prepared into a signable UserOp (USDT gas via paymaster)")
+    console.log("ok   eth_sendTransaction reaches the paymaster; an unfunded Safe gets a readable error")
 
     await page(`document.querySelector("#requests button.reject").click()`)
     await assert.rejects(request, e => e.code === 4001 || /rejected/i.test(e.message))
