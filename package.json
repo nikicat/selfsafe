@@ -1,0 +1,24 @@
+{
+  "name": "selfsafe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "safe": "tsx scripts/safe.ts",
+    "probe:build": "node probe/build.js",
+    "probe": "node probe/build.js && node probe/pair-test.js"
+  },
+  "dependencies": {
+    "@reown/walletkit": "^1.6.0",
+    "@walletconnect/core": "^2.25.0",
+    "@walletconnect/utils": "^2.25.0",
+    "permissionless": "^0.4.1",
+    "viem": "^2.56.9"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@walletconnect/sign-client": "^2.25.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
