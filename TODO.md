@@ -28,12 +28,13 @@
 ## Milestones (design doc)
 
 - [ ] M3 Batching: `wallet_sendCalls` / `wallet_getCallsStatus` (EIP-5792); approve + swap as one UserOp.
-- [ ] M4 Guard: simulation diff before signing, on-chain postconditions in the same batch, typed-data warnings
-      (Permit2, approvals).
+- [ ] M4 Guard: simulation diff before signing, on-chain postconditions in the same batch. Typed-data warnings are
+      done for EIP-2612, DAI-style and Permit2 permits (`src/app/describe.ts`); other formats (Seaport orders,
+      CoW/1inch orders) show as "not a known format".
 
 ## Open checks
 
 - [ ] Mainnet USDT gas for real, two small ops. The `approve(0)` reset under a leftover allowance is verified in
       simulation (`test/usdt-gas.live.ts`); the paymaster's validation and postOp with USDT are not.
-- [ ] Decoding beyond ERC-20 approve/transfer (known routers, Permit2).
+- [ ] Decoding transactions beyond ERC-20 approve/transfer (known routers, `Permit2.approve`).
 - [ ] hash-pin: service worker verification is designed but untested.

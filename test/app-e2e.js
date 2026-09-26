@@ -31,7 +31,7 @@ try {
     console.log("ok   pinned app shows the Safe for the remembered owner")
 
     dapp = await SignClient.init({ projectId, metadata: { name: "e2e dapp", description: "", url: "https://dapp.invalid", icons: [] } })
-    const { uri, approval } = await dapp.connect({ optionalNamespaces: { eip155: { chains: ["eip155:8453"], methods: ["eth_sendTransaction", "personal_sign"], events: ["chainChanged"] } } })
+    const { uri, approval } = await dapp.connect({ optionalNamespaces: { eip155: { chains: ["eip155:8453"], methods: ["eth_sendTransaction", "personal_sign", "eth_signTypedData_v4"], events: ["chainChanged"] } } })
     await page(`window.selfsafe.pair(${JSON.stringify(uri)}).then(() => true)`)
     await until(() => page(`!!document.querySelector("#requests button.approve:not([disabled])")`), "session proposal card", 30000)
     await page(`document.querySelector("#requests button.approve").click()`)
@@ -50,6 +50,25 @@ try {
     await page(`document.querySelector("#requests button.reject").click()`)
     await assert.rejects(request, e => e.code === 4001 || /rejected/i.test(e.message))
     console.log("ok   rejecting in the app reaches the dapp as a user rejection")
+
+    // An unlimited, never-expiring Permit2 allowance must be spelled out and flagged before the owner can sign it.
+    const permit = {
+        domain: { name: "Permit2", chainId: 8453, verifyingContract: "0x000000000022D473030F116dDEE9F6B43aC78BA3" },
+        primaryType: "PermitSingle",
+        types: {
+            EIP712Domain: [{ name: "name", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }],
+            PermitSingle: [{ name: "details", type: "PermitDetails" }, { name: "spender", type: "address" }, { name: "sigDeadline", type: "uint256" }],
+            PermitDetails: [{ name: "token", type: "address" }, { name: "amount", type: "uint160" }, { name: "expiration", type: "uint48" }, { name: "nonce", type: "uint48" }],
+        },
+        message: { details: { token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", amount: (2n ** 160n - 1n).toString(), expiration: (2n ** 48n - 1n).toString(), nonce: "0" }, spender: OWNER, sigDeadline: "9999999999" },
+    }
+    const signRequest = dapp.request({ topic: session.topic, chainId: "eip155:8453", request: { method: "eth_signTypedData_v4", params: [SAFE, JSON.stringify(permit)] } })
+    const warnings = await until(() => page(`[...document.querySelectorAll("#requests .warning")].map(w => w.textContent).join("\\n") || null`), "permit warnings", 30000)
+    assert.equal(warnings, `Warning: UNLIMITED USDC for ${OWNER}\nWarning: the allowance never expires`)
+    assert.match(await page(`document.querySelector("#requests .card p:nth-of-type(2)").textContent`), /Permit2 allowance: .* may spend up to UNLIMITED USDC of the Safe's, with no expiry/)
+    await page(`document.querySelector("#requests button.reject").click()`)
+    await assert.rejects(signRequest, e => e.code === 4001 || /rejected/i.test(e.message))
+    console.log("ok   an unlimited Permit2 allowance is described and flagged before signing")
 
     const csp = consoleErrors.filter(t => /Content-Security-Policy|Content Security Policy/i.test(t))
     assert.deepEqual(csp, [], `CSP errors: ${csp.join("\n")}`)

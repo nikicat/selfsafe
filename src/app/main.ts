@@ -6,6 +6,7 @@ import { buildApprovedNamespaces, getSdkError } from "@walletconnect/utils"
 import { decodeFunctionData, erc20Abi, formatEther, formatUnits, hashMessage, hashTypedData, hexToBytes, isAddress, isAddressEqual, maxUint256, type Address, type Hex } from "viem"
 import { CHAINS, type ChainKey } from "../core/chains"
 import { clients, erc1271Abi, ERC1271_MAGIC, prepareOp, safeAccount, safeMessage, submitOp, type Gas, type SignRequest } from "../core/userop"
+import { describeTypedData, type Described } from "./describe"
 import { discoverWallets, Owner, type WalletInfo } from "./owner"
 
 declare const __PROJECT_ID__: string
@@ -302,22 +303,35 @@ async function describeCall(key: ChainKey, call: { to: Address; value: bigint; d
     return `${symbol}.${decoded.functionName}(${decoded.args?.map(String).join(", ")})`
 }
 
+const tokenInfo = (key: ChainKey) => async (address: Address) => {
+    const { publicClient } = clients(ref(key))
+    const token = { address, abi: erc20Abi } as const
+    const [symbol, decimals] = await Promise.all([publicClient.readContract({ ...token, functionName: "symbol" }), publicClient.readContract({ ...token, functionName: "decimals" })])
+    return { symbol, decimals }
+}
+
 /** ERC-1271: the owner signs the Safe-wrapped message; the Safe's isValidSignature must accept it before we answer. */
 async function signMessage(c: Card, head: HTMLElement, key: ChainKey, method: string, params: any[]) {
-    let hash: Hex, shown: string
+    const chainId = CHAINS[key].chain.id
+    let hash: Hex, shown: string, described: Described
     if (method === "personal_sign") {
         const [a, b] = params
         const msg = isAddress(a) && !isAddress(b) ? b : a // some dapps swap the parameters
         hash = hashMessage({ raw: msg as Hex })
-        shown = (() => { try { return new TextDecoder("utf-8", { fatal: true }).decode(hexToBytes(msg as Hex)) } catch { return msg } })()
+        const text = (() => { try { return new TextDecoder("utf-8", { fatal: true }).decode(hexToBytes(msg as Hex)) } catch { return null } })()
+        shown = text ?? msg
+        described = { summary: [], warnings: text === null ? ["the message is not readable text: you would sign opaque bytes (possibly a hash of something else)"] : [] }
     } else {
         const typed = typeof params[1] === "string" ? JSON.parse(params[1]) : params[1]
         const { EIP712Domain: _, ...types } = typed.types
         hash = hashTypedData({ ...typed, types })
         shown = JSON.stringify(typed.message, null, 2)
+        described = await describeTypedData(typed, { chainId, safe: safe!, now: Math.floor(Date.now() / 1000), token: tokenInfo(key) })
     }
-    const chainId = CHAINS[key].chain.id
-    c.box.append(el("pre", { className: "mono" }, shown.slice(0, 2000)))
+    c.box.append(
+        ...described.summary.map(line => el("p", {}, line)),
+        ...described.warnings.map(w => el("p", { className: "bad warning" }, el("strong", {}, `Warning: ${w}`))),
+        el("pre", { className: "mono" }, shown.slice(0, 2000)))
     const note = el("p", { className: "muted" }, "Signing a message makes it valid for the Safe (ERC-1271). Off-chain signatures can authorise spending (e.g. Permit2); read it first.")
     const sign = el("button", { className: "primary sign", disabled: !owner, onclick: async () => {
         sign.disabled = true
