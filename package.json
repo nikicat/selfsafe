@@ -5,7 +5,9 @@
   "scripts": {
     "safe": "tsx scripts/safe.ts",
     "probe:build": "node probe/build.js",
-    "probe": "node probe/build.js && node probe/pair-test.js"
+    "probe": "node probe/build.js && node probe/pair-test.js",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@reown/walletkit": "^1.6.0",
