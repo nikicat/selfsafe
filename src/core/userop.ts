@@ -1,7 +1,7 @@
 // UserOperations for a 1-of-1 Safe (4337 module) whose owner signs elsewhere (browser wallet, hardware, CLI).
 // Flow: prepareOp -> owner signs `typedData` -> submitOp. Browser-safe: no Node APIs.
 import {
-    createPublicClient, getTypesForEIP712Domain, http, recoverTypedDataAddress, isAddressEqual,
+    createPublicClient, erc20Abi, formatEther, formatUnits, getTypesForEIP712Domain, http, recoverTypedDataAddress, isAddressEqual,
     type Address, type Hex, type PublicClient, type TypedDataDefinition, type TypedDataDomain, type TypedDataParameter,
 } from "viem"
 import { toAccount } from "viem/accounts"
@@ -75,7 +75,7 @@ export async function prepareOp(ref: SafeRef, calls: Call[], gas: Gas): Promise<
             ...(gas.kind === "token" ? { prepareUserOperation: prepareUserOperationForErc20Paymaster(bundler, { balanceOverride: true }) } : {}),
         },
     })
-    const op = await client.prepareUserOperation({ calls }) as UserOperation<"0.7">
+    const op = await client.prepareUserOperation({ calls }).catch(async e => { throw await explainGasError(ref, gas, account.address, e) }) as UserOperation<"0.7">
     try {
         await account.signUserOperation(op)
     } catch (e) {
@@ -84,6 +84,26 @@ export async function prepareOp(ref: SafeRef, calls: Call[], gas: Gas): Promise<
         return { op, typedData: { domain: domain ?? {}, primaryType, message: message as Record<string, unknown>, types: { EIP712Domain: getTypesForEIP712Domain({ domain }), ...types } as unknown as SignRequest["types"] } }
     }
     throw new Error("the owner signer was not invoked")
+}
+
+/**
+ * The bundler and paymaster simulate on live state and report a Safe that cannot pay as bare EntryPoint codes:
+ * AA50 (the paymaster's postOp could not collect the token) or AA21 (no ETH for the prefund). Say what the Safe holds.
+ */
+async function explainGasError(ref: SafeRef, gas: Gas, safe: Address, e: unknown): Promise<unknown> {
+    const code = (e as Error)?.message?.match(/\bAA(50|21)\b/)?.[0]
+    if (!code || (code === "AA50") !== (gas.kind === "token")) return e
+    const { publicClient } = clients(ref)
+    try {
+        const held = gas.kind === "token"
+            ? await Promise.all([
+                publicClient.readContract({ address: gas.token, abi: erc20Abi, functionName: "balanceOf", args: [safe] }),
+                publicClient.readContract({ address: gas.token, abi: erc20Abi, functionName: "decimals" }),
+                publicClient.readContract({ address: gas.token, abi: erc20Abi, functionName: "symbol" }),
+            ]).then(([b, d, s]) => `${formatUnits(b, d)} ${s}`)
+            : `${formatEther(await publicClient.getBalance({ address: safe }))} ETH`
+        return new Error(`the Safe cannot pay for gas: it holds ${held} on ${CHAINS[ref.chainKey].chain.name} (${code}). Fund it or pick another gas option.`)
+    } catch { return e }
 }
 
 /**

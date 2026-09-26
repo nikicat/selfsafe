@@ -39,7 +39,5 @@
 
 - [ ] Mainnet USDT gas for real, two small ops. The `approve(0)` reset under a leftover allowance is verified in
       simulation (`test/usdt-gas.live.ts`); the paymaster's validation and postOp with USDT are not.
-- [ ] Readable error when the Safe lacks the gas token: Pimlico's `pm_getPaymasterData` simulates on live state and
-      answers `AA50 PostOp Reverted ... reason: 0x`, which the app shows as is.
 - [ ] Decoding beyond ERC-20 approve/transfer (known routers, Permit2).
 - [ ] hash-pin: service worker verification is designed but untested.

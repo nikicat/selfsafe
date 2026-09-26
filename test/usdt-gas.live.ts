@@ -16,7 +16,7 @@ import { simulateCalls } from "viem/actions"
 import { createSmartAccountClient } from "permissionless"
 import { prepareUserOperationForErc20Paymaster } from "permissionless/experimental/pimlico"
 import { bundlerUrl, CHAINS } from "../src/core/chains"
-import { clients, safeAccount, type SafeRef } from "../src/core/userop"
+import { clients, prepareOp, safeAccount, type SafeRef } from "../src/core/userop"
 
 const USDT = CHAINS.mainnet.usdt
 // TetherToken storage: balances at slot 2, allowed (owner => spender => amount) at slot 5
@@ -98,4 +98,8 @@ test("mainnet USDT gas: the injected approve(0) lets the op run despite a leftov
     const noReset = await account.encodeCalls(inner.slice(1))
     const withoutReset = await execute(account.address, op.factory!, op.factoryData!, noReset, paymaster)
     assert.equal(withoutReset.executed, false, "USDT refuses non-zero -> non-zero approve")
+})
+
+test("an unfunded Safe gets a readable error, not the paymaster's bare AA50", async () => {
+    await assert.rejects(prepareOp(ref, [{ to: ref.owner, value: 0n }], { kind: "token", token: USDT }), /the Safe cannot pay for gas: it holds 0 USDT on Ethereum \(AA50\)/)
 })
